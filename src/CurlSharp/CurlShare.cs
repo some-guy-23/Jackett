@@ -19,6 +19,8 @@
 
 using System;
 using System.Runtime.InteropServices;
+using CurlSharp.Callbacks;
+using CurlSharp.Enums;
 
 namespace CurlSharp
 {
@@ -31,17 +33,12 @@ namespace CurlSharp
     {
         // private members
         private GCHandle _hThis; // for handle extraction
-        private CurlShareCode _lastErrorCode;
-        private string _lastErrorDescription;
 #if USE_LIBCURLSHIM
         private NativeMethods._ShimLockCallback _pDelLock; // lock delegate
         private NativeMethods._ShimUnlockCallback _pDelUnlock; // unlock delegate
 #endif
         private IntPtr _pShare; // share handle
-        private CurlShareLockCallback _pfLock; // client lock delegate
-        private CurlShareUnlockCallback _pfUnlock; // client unlock delegate
         private IntPtr _ptrThis; // numeric handle
-        private Object _userData; // user data for delegates
 
         /// <summary>
         ///     Constructor
@@ -65,23 +62,11 @@ namespace CurlSharp
             installDelegates();
         }
 
-        public object UserData
-        {
-            get { return _userData; }
-            set { _userData = value; }
-        }
+        public object UserData { get; set; }
 
-        public CurlShareUnlockCallback UnlockFunction
-        {
-            get { return _pfUnlock; }
-            set { _pfUnlock = value; }
-        }
+        public CurlShareUnlockCallback UnlockFunction { get; set; }
 
-        public CurlShareLockCallback LockFunction
-        {
-            get { return _pfLock; }
-            set { _pfLock = value; }
-        }
+        public CurlShareLockCallback LockFunction { get; set; }
 
         public CurlLockData Share
         {
@@ -93,15 +78,9 @@ namespace CurlSharp
             set { setShareOption(CurlShareOption.Unshare, value); }
         }
 
-        public CurlShareCode LastErrorCode
-        {
-            get { return _lastErrorCode; }
-        }
+        public CurlShareCode LastErrorCode { get; private set; }
 
-        public string LastErrorDescription
-        {
-            get { return _lastErrorDescription; }
-        }
+        public string LastErrorDescription { get; private set; }
 
         /// <summary>
         ///     Cleanup unmanaged resources.
@@ -140,7 +119,7 @@ namespace CurlSharp
         ///     This is thrown if
         ///     the native <c>share</c> handle wasn't created successfully.
         /// </exception>
-        public CurlShareCode SetOpt(CurlShareOption option, Object parameter)
+        public CurlShareCode SetOpt(CurlShareOption option, object parameter)
         {
             EnsureHandle();
             var retCode = CurlShareCode.Ok;
@@ -151,14 +130,14 @@ namespace CurlSharp
                     var lf = parameter as CurlShareLockCallback;
                     if (lf == null)
                         return CurlShareCode.BadOption;
-                    _pfLock = lf;
+                    LockFunction = lf;
                     break;
 
                 case CurlShareOption.UnlockFunction:
                     var ulf = parameter as CurlShareUnlockCallback;
                     if (ulf == null)
                         return CurlShareCode.BadOption;
-                    _pfUnlock = ulf;
+                    UnlockFunction = ulf;
                     break;
 
                 case CurlShareOption.Share:
@@ -170,7 +149,7 @@ namespace CurlSharp
                 }
 
                 case CurlShareOption.UserData:
-                    _userData = parameter;
+                    UserData = parameter;
                     break;
 
                 default:
@@ -182,10 +161,10 @@ namespace CurlSharp
 
         private void setLastError(CurlShareCode code, CurlShareOption opt)
         {
-            if (_lastErrorCode == CurlShareCode.Ok && code != CurlShareCode.Ok)
+            if ((LastErrorCode == CurlShareCode.Ok) && (code != CurlShareCode.Ok))
             {
-                _lastErrorCode = code;
-                _lastErrorDescription = string.Format("Error: {0} setting option {1}", StrError(code), opt);
+                LastErrorCode = code;
+                LastErrorDescription = $"Error: {StrError(code)} setting option {opt}";
             }
         }
 
@@ -206,10 +185,8 @@ namespace CurlSharp
         ///     string description.
         /// </param>
         /// <returns>The string description.</returns>
-        public String StrError(CurlShareCode errorNum)
-        {
-            return Marshal.PtrToStringAnsi(NativeMethods.curl_share_strerror(errorNum));
-        }
+        public string StrError(CurlShareCode errorNum)
+            => Marshal.PtrToStringAnsi(NativeMethods.curl_share_strerror(errorNum));
 
         private void Dispose(bool disposing)
         {
@@ -229,10 +206,7 @@ namespace CurlSharp
             }
         }
 
-        internal IntPtr GetHandle()
-        {
-            return _pShare;
-        }
+        internal IntPtr GetHandle() => _pShare;
 
         private void EnsureHandle()
         {
@@ -243,7 +217,7 @@ namespace CurlSharp
         private void installDelegates()
         {
             _hThis = GCHandle.Alloc(this);
-            _ptrThis = (IntPtr)_hThis;
+            _ptrThis = (IntPtr) _hThis;
 #if USE_LIBCURLSHIM
             _pDelLock = LockDelegate;
             _pDelUnlock = UnlockDelegate;
@@ -255,22 +229,14 @@ namespace CurlSharp
         {
             var gch = (GCHandle) userPtr;
             var share = (CurlShare) gch.Target;
-            if (share == null)
-                return;
-            if (share.LockFunction == null)
-                return;
-            share.LockFunction((CurlLockData) data, (CurlLockAccess) access, share.UserData);
+            share?.LockFunction?.Invoke((CurlLockData) data, (CurlLockAccess) access, share.UserData);
         }
 
         internal static void UnlockDelegate(int data, IntPtr userPtr)
         {
             var gch = (GCHandle) userPtr;
             var share = (CurlShare) gch.Target;
-            if (share == null)
-                return;
-            if (share.UnlockFunction == null)
-                return;
-            share.UnlockFunction((CurlLockData) data, share.UserData);
+            share?.UnlockFunction?.Invoke((CurlLockData) data, share.UserData);
         }
     }
 }

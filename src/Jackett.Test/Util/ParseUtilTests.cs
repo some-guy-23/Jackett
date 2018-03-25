@@ -1,16 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Xml.Linq;
 using System.Xml.XPath;
 using FluentAssertions;
-using Jackett.Utils;
+using Jackett.Common.Utils;
 using NUnit.Framework;
 
-namespace JackettTest.Util
+namespace Jackett.Test.Util
 {
     [TestFixture]
     public class ParseUtilTests
@@ -19,7 +15,7 @@ namespace JackettTest.Util
         {
             get
             {
-                var type = typeof(ParseUtilTests);
+                var type = typeof(ParseUtilTests);                
                 using (var resourceStream = type.Assembly.GetManifestResourceStream($"{type.Namespace}.Invalid-RSS.xml"))
                 using (var sr = new StreamReader(resourceStream))
                 {
@@ -34,7 +30,7 @@ namespace JackettTest.Util
         {
             var invalidRss = InvalidRssXml;
             Action parseAction = () => XDocument.Parse(invalidRss);
-            parseAction.ShouldThrow<Exception>().WithMessage("'\a', hexadecimal value 0x07, is an invalid character. Line 12, position 7.");
+            parseAction.Should().Throw<Exception>().WithMessage("'\a', hexadecimal value 0x07, is an invalid character. Line 12, position 7.");
 
             var validRSs = ParseUtil.RemoveInvalidXmlChars(invalidRss);
             var rssDoc = XDocument.Parse(validRSs);

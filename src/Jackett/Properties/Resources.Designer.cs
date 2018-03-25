@@ -19,7 +19,7 @@ namespace Jackett.Properties {
     // class via a tool like ResGen or Visual Studio.
     // To add or remove a member, edit your .ResX file then rerun ResGen
     // with the /str option, or rebuild your VS project.
-    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder", "4.0.0.0")]
+    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder", "15.0.0.0")]
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
     internal class Resources {
@@ -57,44 +57,6 @@ namespace Jackett.Properties {
             }
             set {
                 resourceCulture = value;
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to &lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
-        ///&lt;rss version=&quot;1.0&quot; xmlns:atom=&quot;http://www.w3.org/2005/Atom&quot; xmlns:torznab=&quot;http://torznab.com/schemas/2015/feed&quot;&gt;
-        ///  &lt;channel&gt;
-        ///    &lt;atom:link href=&quot;https://hdaccess.net/api&quot; rel=&quot;self&quot; type=&quot;application/rss+xml&quot; /&gt;
-        ///    &lt;title&gt;HDAccess&lt;/title&gt;
-        ///    &lt;description&gt;HDAccess API&lt;/description&gt;
-        ///    &lt;link&gt;https://hdaccess.net&lt;/link&gt;
-        ///    &lt;language&gt;en-us&lt;/language&gt;
-        ///    &lt;webMaster&gt;($email) (HDA Invites)&lt;/webMaster&gt;
-        ///    &lt;category&gt;search&lt;/category&gt;
-        ///    &lt;image&gt;
-        ///      &lt;url&gt;h [rest of string was truncated]&quot;;.
-        /// </summary>
-        internal static string test {
-            get {
-                return ResourceManager.GetString("test", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to &lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot; ?&gt;
-        ///&lt;rss version=&quot;1.0&quot; xmlns:atom=&quot;http://www.w3.org/2005/Atom&quot; xmlns:torznab=&quot;http://torznab.com/schemas/2015/feed&quot;&gt;
-        ///  &lt;channel&gt;
-        ///    &lt;item&gt;
-        ///      &lt;link&gt;https://example.com&lt;/link&gt;
-        ///      &lt;pubDate&gt;Sat, 14 Mar 2015 17:10:42 -0400&lt;/pubDate&gt;
-        ///      &lt;enclosure url=&quot;https://example.com&quot; length=&quot;1&quot; type=&quot;application/x-bittorrent&quot; /&gt;
-        ///    &lt;/item&gt;
-        ///  &lt;/channel&gt;
-        ///&lt;/rss&gt;.
-        /// </summary>
-        internal static string validator_reply {
-            get {
-                return ResourceManager.GetString("validator_reply", resourceCulture);
             }
         }
     }

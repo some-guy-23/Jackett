@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Runtime.InteropServices;
+using CurlSharp.Enums;
 
-namespace CurlSharp
+namespace CurlSharp.Callbacks
 {
     /// <summary>
     ///     Called when cURL has debug information for the client.
@@ -26,12 +27,16 @@ namespace CurlSharp
     ///             <description>Debug information as a string.</description>
     ///         </item>
     ///         <item>
+    ///             <term>size</term>
+    ///             <description>The size in bytes.</description>
+    ///         </item>
+    ///         <item>
     ///             <term>extraData</term>
     ///             <description>Client-provided extra data.</description>
     ///         </item>
     ///     </list>
     /// </remarks>
-    public delegate void CurlDebugCallback(CurlInfoType infoType, String message, Object extraData);
+    public delegate void CurlDebugCallback(CurlInfoType infoType, String message, int size, Object extraData);
 
     /// <summary>
     ///     Called when cURL has header data for the client.

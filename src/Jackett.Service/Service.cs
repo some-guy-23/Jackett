@@ -1,12 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Diagnostics;
-using System.Linq;
+﻿using Jackett.Common.Models.Config;
 using System.ServiceProcess;
-using System.Text;
-using System.Threading.Tasks;
+using Jackett.Common;
 
 namespace Jackett.Service
 {
@@ -19,6 +13,7 @@ namespace Jackett.Service
 
         protected override void OnStart(string[] args)
         {
+            Engine.BuildContainer(new RuntimeSettings(), new WebApi2Module());
             Engine.Logger.Info("Service starting");
             Engine.Server.Initalize();
             Engine.Server.Start();

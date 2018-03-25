@@ -1,49 +1,30 @@
-﻿using Autofac;
-using Jackett.Models.Config;
-using Jackett.Services;
-using Jackett.Utils;
-using Jackett.Utils.Clients;
-using Microsoft.Owin.Hosting;
-using Newtonsoft.Json.Linq;
+﻿using Microsoft.Owin.Hosting;
 using NLog;
-using NLog.Config;
-using NLog.Targets;
-using NLog.Windows.Forms;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.NetworkInformation;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
+using System.Threading;
 using System.Web;
+using System.Collections;
+using System.Text.RegularExpressions;
+using Jackett.Common;
+using Jackett.Common.Models.Config;
+using Jackett.Common.Services.Interfaces;
+using Jackett.Common.Utils.Clients;
 
 namespace Jackett.Services
 {
-    public interface IServerService
-    {
-        void Initalize();
-        void Start();
-        void Stop();
-        void ReserveUrls(bool doInstall = true);
-        ServerConfig Config { get; }
-        void SaveConfig();
-        Uri ConvertToProxyLink(Uri link, string serverUrl, string indexerId, string action = "dl", string file = "t.torrent");
-        string BasePath();
-    }
 
     public class ServerService : IServerService
     {
-        private ServerConfig config;
-
         private IDisposable _server = null;
 
         private IIndexerManagerService indexerService;
@@ -51,10 +32,13 @@ namespace Jackett.Services
         private ISerializeService serializeService;
         private IConfigurationService configService;
         private Logger logger;
-        private IWebClient client;
+        private Common.Utils.Clients.WebClient client;
         private IUpdateService updater;
+        private List<string> _notices = new List<string>();
+        private ServerConfig config;
+        IProtectionService _protectionService;
 
-        public ServerService(IIndexerManagerService i, IProcessService p, ISerializeService s, IConfigurationService c, Logger l, IWebClient w, IUpdateService u)
+        public ServerService(IIndexerManagerService i, IProcessService p, ISerializeService s, IConfigurationService c, Logger l, Common.Utils.Clients.WebClient w, IUpdateService u, IProtectionService protectionService, ServerConfig serverConfig)
         {
             indexerService = i;
             processService = p;
@@ -63,35 +47,40 @@ namespace Jackett.Services
             logger = l;
             client = w;
             updater = u;
+            config = serverConfig;
+            _protectionService = protectionService;
+        }        
 
-            LoadConfig();
-        }
-
-        public ServerConfig Config
+        public List<string> notices
         {
-            get { return config; }
+            get
+            {
+                return _notices;
+            }
         }
 
-        public Uri ConvertToProxyLink(Uri link, string serverUrl, string indexerId, string action = "dl", string file = "t.torrent")
+        public Uri ConvertToProxyLink(Uri link, string serverUrl, string indexerId, string action = "dl", string file = "t")
         {
             if (link == null || (link.IsAbsoluteUri && link.Scheme == "magnet"))
                 return link;
-         
-            var encodedLink = HttpServerUtility.UrlTokenEncode(Encoding.UTF8.GetBytes(link.ToString()));
+
+            var encryptedLink = _protectionService.Protect(link.ToString());
+            var encodedLink = HttpServerUtility.UrlTokenEncode(Encoding.UTF8.GetBytes(encryptedLink));
             string urlEncodedFile = WebUtility.UrlEncode(file);
-            var proxyLink = string.Format("{0}{1}/{2}/{3}?path={4}&file={5}", serverUrl, action, indexerId, config.APIKey, encodedLink, urlEncodedFile);
+            var proxyLink = string.Format("{0}{1}/{2}/?jackett_apikey={3}&path={4}&file={5}", serverUrl, action, indexerId, config.APIKey, encodedLink, urlEncodedFile);
             return new Uri(proxyLink);
         }
 
         public string BasePath()
         {
-            if (config.BasePathOverride == null || config.BasePathOverride == "") {
-                return "/";
+            if (config.BasePathOverride == null || config.BasePathOverride == "")
+            {
+                return "";
             }
             var path = config.BasePathOverride;
-            if (!path.EndsWith("/"))
+            if (path.EndsWith("/"))
             {
-                path = path + "/";
+                path = path.TrimEnd('/');
             }
             if (!path.StartsWith("/"))
             {
@@ -99,54 +88,7 @@ namespace Jackett.Services
             }
             return path;
         }
-
-        private void LoadConfig()
-        {
-            // Load config
-            config = configService.GetConfig<ServerConfig>();
-            if (config == null)
-            {
-                config = new ServerConfig();
-            }
-
-            if (string.IsNullOrWhiteSpace(config.APIKey))
-            {
-                // Check for legacy key config
-                var apiKeyFile = Path.Combine(configService.GetAppDataFolder(), "api_key.txt");
-                if (File.Exists(apiKeyFile))
-                {
-                    config.APIKey = File.ReadAllText(apiKeyFile);
-                }
-
-                // Check for legacy settings
-
-                var path = Path.Combine(configService.GetAppDataFolder(), "config.json"); ;
-                var jsonReply = new JObject();
-                if (File.Exists(path))
-                {
-                    jsonReply = JObject.Parse(File.ReadAllText(path));
-                    config.Port = (int)jsonReply["port"];
-                    config.AllowExternal = (bool)jsonReply["public"];
-                }
-
-                if (string.IsNullOrWhiteSpace(config.APIKey))
-                    config.APIKey = StringUtil.GenerateRandom(32);
-
-                configService.SaveConfig<ServerConfig>(config);
-            }
-
-            if (string.IsNullOrWhiteSpace(config.InstanceId))
-            {
-                config.InstanceId = StringUtil.GenerateRandom(64);
-                configService.SaveConfig<ServerConfig>(config);
-            }
-        }
-
-        public void SaveConfig()
-        {
-            configService.SaveConfig<ServerConfig>(config);
-        }
-
+        
         public void Initalize()
         {
             logger.Info("Starting Jackett " + configService.GetVersion());
@@ -156,6 +98,18 @@ namespace Jackett.Services
                 var runtimedir = RuntimeEnvironment.GetRuntimeDirectory();
                 logger.Info("Environment version: " + Environment.Version.ToString() + " (" + runtimedir + ")");
                 logger.Info("OS version: " + Environment.OSVersion.ToString() + (Environment.Is64BitOperatingSystem ? " (64bit OS)" : "") + (Environment.Is64BitProcess ? " (64bit process)" : ""));
+
+                try
+                {
+                    int workerThreads;
+                    int completionPortThreads;
+                    ThreadPool.GetMaxThreads(out workerThreads, out completionPortThreads);
+                    logger.Info("ThreadPool MaxThreads: " + workerThreads + " workerThreads, " + completionPortThreads + " completionPortThreads");
+                }
+                catch (Exception e)
+                {
+                    logger.Error("Error while getting MaxThreads details: " + e);
+                }
 
                 try
                 {
@@ -185,29 +139,59 @@ namespace Jackett.Services
                         monoVersion = displayName.Invoke(null, null).ToString();
                     logger.Info("mono version: " + monoVersion);
 
-                    if (monoVersion.StartsWith("3."))
+                    var monoVersionO = new Version(monoVersion.Split(' ')[0]);
+
+                    if (monoVersionO.Major < 4)
                     {
                         logger.Error("Your mono version is to old (mono 3 is no longer supported). Please update to the latest version from http://www.mono-project.com/download/");
-                        Environment.Exit(2);
+                        Engine.Exit(2);
                     }
-                    else if (monoVersion.StartsWith("4.2."))
+                    else if (monoVersionO.Major == 4 && monoVersionO.Minor == 2)
                     {
-                        logger.Error("mono version 4.2.* is known to cause problems with Jackett. If you experience any problems please try updating to the latest mono version from http://www.mono-project.com/download/ first.");
+                        var notice = "mono version 4.2.* is known to cause problems with Jackett. If you experience any problems please try updating to the latest mono version from http://www.mono-project.com/download/ first.";
+                        _notices.Add(notice);
+                        logger.Error(notice);
                     }
 
                     try
                     {
                         // Check for mono-devel
                         // Is there any better way which doesn't involve a hard cashes?
-                        var mono_devel_file = Path.Combine(runtimedir, "mono-api-info.exe"); 
+                        var mono_devel_file = Path.Combine(runtimedir, "mono-api-info.exe");
                         if (!File.Exists(mono_devel_file))
                         {
-                            logger.Error("It looks like the mono-devel package is not installed, please make sure it's installed to avoid crashes.");
+                            var notice = "It looks like the mono-devel package is not installed, please make sure it's installed to avoid crashes.";
+                            _notices.Add(notice);
+                            logger.Error(notice);
                         }
                     }
                     catch (Exception e)
                     {
                         logger.Error(e, "Error while checking for mono-devel");
+                    }
+
+                    try
+                    {
+                        // Check for ca-certificates-mono
+                        var mono_cert_file = Path.Combine(runtimedir, "cert-sync.exe");
+                        if (!File.Exists(mono_cert_file))
+                        {
+                            if ((monoVersionO.Major >= 4 && monoVersionO.Minor >= 8) || monoVersionO.Major >= 5)
+                            {
+                                var notice = "The ca-certificates-mono package is not installed, HTTPS trackers won't work. Please install it.";
+                                _notices.Add(notice);
+                                logger.Error(notice);
+                            }
+                            else
+                            {
+                                logger.Info("The ca-certificates-mono package is not installed, it will become mandatory once mono >= 4.8 is used.");
+                            }
+
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        logger.Error(e, "Error while checking for ca-certificates-mono");
                     }
 
                     try
@@ -218,7 +202,54 @@ namespace Jackett.Services
                     {
                         logger.Debug(e);
                         logger.Error(e.Message + " Most likely the mono-locale-extras package is not installed.");
-                        Environment.Exit(2);
+                        Engine.Exit(2);
+                    }
+
+                    if (Engine.WebClientType == typeof(HttpWebClient) || Engine.WebClientType == typeof(HttpWebClient2))
+                    { 
+                        // check if the certificate store was initialized using Mono.Security.X509.X509StoreManager.TrustedRootCertificates.Count
+                        try
+                        {
+                            var monoSecurity = Assembly.Load("Mono.Security");
+                            Type monoX509StoreManager = monoSecurity.GetType("Mono.Security.X509.X509StoreManager");
+                            if (monoX509StoreManager != null)
+                            {
+                                var TrustedRootCertificatesProperty = monoX509StoreManager.GetProperty("TrustedRootCertificates");
+                                var TrustedRootCertificates = (ICollection)TrustedRootCertificatesProperty.GetValue(null);
+
+                                logger.Info("TrustedRootCertificates count: " + TrustedRootCertificates.Count);
+
+                                if (TrustedRootCertificates.Count == 0)
+                                {
+                                    var CACertificatesFiles = new string[] {
+                                        "/etc/ssl/certs/ca-certificates.crt", // Debian based
+                                        "/etc/pki/tls/certs/ca-bundle.c", // RedHat based
+                                        "/etc/ssl/ca-bundle.pem", // SUSE
+                                        };
+
+                                    var notice = "The mono certificate store is not initialized.<br/>\n";
+                                    var logSpacer = "                     ";
+                                    var CACertificatesFile = CACertificatesFiles.Where(f => File.Exists(f)).FirstOrDefault();
+                                    var CommandRoot = "curl -sS https://curl.haxx.se/ca/cacert.pem | cert-sync /dev/stdin";
+                                    var CommandUser = "curl -sS https://curl.haxx.se/ca/cacert.pem | cert-sync --user /dev/stdin";
+                                    if (CACertificatesFile != null)
+                                    {
+                                        CommandRoot = "cert-sync " + CACertificatesFile;
+                                        CommandUser = "cert-sync --user " + CACertificatesFile;
+                                    }
+                                    notice += logSpacer + "Please run the following command as root:<br/>\n";
+                                    notice += logSpacer + "<pre>" + CommandRoot + "</pre><br/>\n";
+                                    notice += logSpacer + "If you don't have root access or you're running MacOS, please run the following command as the jackett user (" + Environment.UserName + "):<br/>\n";
+                                    notice += logSpacer + "<pre>" + CommandUser + "</pre>";
+                                    _notices.Add(notice);
+                                    logger.Error(Regex.Replace(notice, "<.*?>", String.Empty));
+                                }
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            logger.Error(e, "Error while chekcing the mono certificate store");
+                        }
                     }
                 }
             }
@@ -227,14 +258,23 @@ namespace Jackett.Services
                 logger.Error("Error while getting environment details: " + e);
             }
 
+            try
+            {
+                if (Environment.UserName == "root")
+                { 
+                    var notice = "Jackett is running with root privileges. You should run Jackett as an unprivileged user.";
+                    _notices.Add(notice);
+                    logger.Error(notice);
+                }
+            }
+            catch (Exception e)
+            {
+                logger.Error(e, "Error while checking the username");
+            }
+
             CultureInfo.DefaultThreadCurrentCulture = new CultureInfo("en-US");
             // Load indexers
-            indexerService.InitIndexers();
-            foreach(string dir in configService.GetCardigannDefinitionsFolders())
-            {
-                indexerService.InitCardigannIndexers(dir);
-            }
-            indexerService.SortIndexers();
+            indexerService.InitIndexers(configService.GetCardigannDefinitionsFolders());
             client.Init();
             updater.CleanupTempDir();
         }
@@ -245,7 +285,7 @@ namespace Jackett.Services
             logger.Info("Starting web server at " + config.GetListenAddresses()[0]);
             var startOptions = new StartOptions();
             config.GetListenAddresses().ToList().ForEach(u => startOptions.Urls.Add(u));
-            Startup.BasePath = BasePath();
+            config.RuntimeSettings.BasePath = BasePath();
             try
             {
                 _server = WebApp.Start<Startup>(startOptions);
@@ -256,12 +296,12 @@ namespace Jackett.Services
                 if (inner is SocketException && ((SocketException)inner).SocketErrorCode == SocketError.AddressAlreadyInUse) // Linux (mono)
                 {
                     logger.Error("Address already in use: Most likely Jackett is already running.");
-                    Environment.Exit(1);
+                    Engine.Exit(1);
                 }
                 else if (inner is HttpListenerException && ((HttpListenerException)inner).ErrorCode == 183) // Windows
                 {
                     logger.Error(inner.Message + " Most likely Jackett is already running.");
-                    Environment.Exit(1);
+                    Engine.Exit(1);
                 }
                 throw e;
             }
@@ -293,6 +333,32 @@ namespace Jackett.Services
             {
                 _server.Dispose();
             }
+        }
+
+        public string GetServerUrl(HttpRequestMessage Request)
+        {
+            var scheme = Request.RequestUri.Scheme;
+            var port = Request.RequestUri.Port;
+
+            // Check for protocol headers added by reverse proxys
+            // X-Forwarded-Proto: A de facto standard for identifying the originating protocol of an HTTP request
+            var X_Forwarded_Proto = Request.Headers.Where(x => x.Key == "X-Forwarded-Proto").Select(x => x.Value).FirstOrDefault();
+            if (X_Forwarded_Proto != null)
+            {
+                scheme = X_Forwarded_Proto.First();
+            }
+            // Front-End-Https: Non-standard header field used by Microsoft applications and load-balancers
+            else if (Request.Headers.Where(x => x.Key == "Front-End-Https" && x.Value.FirstOrDefault() == "on").Any())
+            {
+                scheme = "https";
+            }
+
+            // default to 443 if the Host header doesn't contain the port (needed for reverse proxy setups)
+            if (scheme == "https" && !Request.RequestUri.Authority.Contains(":"))
+                port = 443;
+
+            var serverUrl = string.Format("{0}://{1}:{2}{3}/", scheme, Request.RequestUri.Host, port, BasePath());
+            return serverUrl;
         }
     }
 }

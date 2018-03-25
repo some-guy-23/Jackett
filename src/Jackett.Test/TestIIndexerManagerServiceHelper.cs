@@ -1,13 +1,11 @@
-﻿using Jackett.Services;
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
-using Jackett.Indexers;
+using Jackett.Common.Indexers;
+using Jackett.Common.Services.Interfaces;
 using Newtonsoft.Json.Linq;
 
-namespace JackettTest
+namespace Jackett.Test
 {
     class TestIndexerManagerServiceHelper : IIndexerManagerService
     {
@@ -28,7 +26,12 @@ namespace JackettTest
             throw new NotImplementedException();
         }
 
-        public void InitIndexers()
+        public IWebIndexer GetWebIndexer(string name)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void InitIndexers(IEnumerable<string> path)
         {
             throw new NotImplementedException();
         }
@@ -43,12 +46,7 @@ namespace JackettTest
             throw new NotImplementedException();
         }
 
-        public void InitCardigannIndexers(string path)
-        {
-            throw new NotImplementedException();
-        }
-
-        public void SortIndexers()
+        public void InitAggregateIndexer()
         {
             throw new NotImplementedException();
         }

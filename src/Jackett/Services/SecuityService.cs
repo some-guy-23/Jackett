@@ -1,36 +1,30 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
-using System.Web;
+using Jackett.Common.Models.Config;
+using Jackett.Common.Services.Interfaces;
 
 namespace Jackett.Services
 {
-    public interface ISecuityService
-    {
-        bool CheckAuthorised(HttpRequestMessage request);
-        string HashPassword(string input);
-        void Login(HttpResponseMessage request);
-        void Logout(HttpResponseMessage request);
-    }
 
     class SecuityService : ISecuityService
     {
         private const string COOKIENAME = "JACKETT";
-        private IServerService serverService;
+        private ServerConfig _serverConfig;
 
-        public SecuityService(IServerService ss)
+        public SecuityService(ServerConfig sc)
         {
-            serverService = ss;
+            _serverConfig = sc;
         }
 
         public string HashPassword(string input)
         {
+            if (input == null)
+                return null;
             // Append key as salt
-            input += serverService.Config.APIKey;
+            input += _serverConfig.APIKey;
 
             UnicodeEncoding UE = new UnicodeEncoding();
             byte[] hashValue;
@@ -50,7 +44,7 @@ namespace Jackett.Services
         public void Login(HttpResponseMessage response)
         {
             // Login
-            response.Headers.Add("Set-Cookie", COOKIENAME + "=" + serverService.Config.AdminPassword + "; path=/");
+            response.Headers.Add("Set-Cookie", COOKIENAME + "=" + _serverConfig.AdminPassword + "; path=/");
         }
 
         public void Logout(HttpResponseMessage response)
@@ -61,7 +55,7 @@ namespace Jackett.Services
 
         public bool CheckAuthorised(HttpRequestMessage request)
         {
-            if (string.IsNullOrEmpty(Engine.Server.Config.AdminPassword))
+            if (string.IsNullOrEmpty(_serverConfig.AdminPassword))
                 return true;
 
             try
@@ -69,7 +63,7 @@ namespace Jackett.Services
                 var cookie = request.Headers.GetCookies(COOKIENAME).FirstOrDefault();
                 if (cookie != null)
                 {
-                    return cookie[COOKIENAME].Value == serverService.Config.AdminPassword;
+                    return cookie[COOKIENAME].Value == _serverConfig.AdminPassword;
                 }
             }
             catch { }

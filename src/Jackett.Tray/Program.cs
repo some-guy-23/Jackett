@@ -1,10 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace JackettTray
+namespace Jackett.Tray
 {
     static class Program
     {
@@ -14,9 +13,21 @@ namespace JackettTray
         [STAThread]
         static void Main()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new Main());
+            var JacketTrayProcess = Process.GetCurrentProcess();
+            var runningProcesses = Process.GetProcesses();
+            var currentSessionID = Process.GetCurrentProcess().SessionId;
+            var sameAsThisSession = runningProcesses.Where(p => p.SessionId == currentSessionID);
+            var sameAsThisSessionJacketTray = sameAsThisSession.Where(p => p.ProcessName == JacketTrayProcess.ProcessName && p.Id != JacketTrayProcess.Id);
+            if (sameAsThisSessionJacketTray.Any())
+            {
+                MessageBox.Show("JackettTray is already running");
+            }
+            else
+            { 
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                Application.Run(new Main());
+            }
         }
     }
 }

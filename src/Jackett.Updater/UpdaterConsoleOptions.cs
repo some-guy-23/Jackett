@@ -1,15 +1,10 @@
 ﻿using CommandLine;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Jackett.Updater
 {
     public class UpdaterConsoleOptions
     {
-        [Option('p', "Path", HelpText = "Install location")]
+        [Option('p', "Path", HelpText = "Install location", Required = true)]
         public string Path { get; set; }
 
         [Option('t', "Type", HelpText = "Install type")]
@@ -18,10 +13,10 @@ namespace Jackett.Updater
         [Option('a', "Args", HelpText = "Launch arguments")]
         public string Args { get; set; }
 
-        [Option(HelpText = "Don't restart after update")]
+        [Option("NoRestart", HelpText = "Don't restart after update")]
         public bool NoRestart { get; set; }
 
-        [Option(HelpText = "PIDs which will be killed before (Windows) or after (Unix) the update")]
+        [Option("KillPids", HelpText = "PIDs which will be killed before (Windows) or after (Unix) the update")]
         public string KillPids { get; set; }
     }
 }

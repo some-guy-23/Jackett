@@ -1,17 +1,14 @@
 ﻿using Autofac;
-using Jackett;
-using Jackett.Services;
-using Jackett.Utils.Clients;
 using NLog;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
+using Jackett.Common.Plumbing;
+using Jackett.Common.Models.Config;
+using Jackett.Common.Services.Interfaces;
+using Jackett.Common.Utils.Clients;
 
-namespace JackettTest
+namespace Jackett.Test
 {
     class TestUtil
     {
@@ -19,17 +16,13 @@ namespace JackettTest
 
         public static void SetupContainer()
         {
-            var builder = new ContainerBuilder();
-            builder.RegisterModule<JackettModule>();
-            builder.RegisterType<TestWebClient>().As<IWebClient>().SingleInstance();
-            builder.RegisterInstance<Logger>(LogManager.GetCurrentClassLogger()).SingleInstance();
+            var builder = new ContainerBuilder();            
+            builder.RegisterModule(new JackettModule(new RuntimeSettings()));
+            builder.RegisterModule<WebApi2Module>();
+            builder.RegisterType<TestWebClient>().As<WebClient>().SingleInstance();
+            builder.RegisterInstance(LogManager.GetCurrentClassLogger()).SingleInstance();
             builder.RegisterType<TestIndexerManagerServiceHelper>().As<IIndexerManagerService>().SingleInstance();
             testContainer = builder.Build();
-
-            // Register the container in itself to allow for late resolves
-            var secondaryBuilder = new ContainerBuilder();
-            secondaryBuilder.RegisterInstance<IContainer>(testContainer).SingleInstance();
-            secondaryBuilder.Update(testContainer);
         }
 
         public static TestIndexerManagerServiceHelper IndexManager
@@ -47,20 +40,20 @@ namespace JackettTest
 
         public static void RegisterByteCall(WebRequest r, Func<WebRequest, WebClientByteResult> f)
         {
-            var client = testContainer.Resolve<IWebClient>() as TestWebClient;
+            var client = testContainer.Resolve<WebClient>() as TestWebClient;
             client.RegisterByteCall(r, f);
         }
 
         public static void RegisterStringCall(WebRequest r, Func<WebRequest, WebClientStringResult> f)
         {
-            var client = testContainer.Resolve<IWebClient>() as TestWebClient;
+            var client = testContainer.Resolve<WebClient>() as TestWebClient;
             client.RegisterStringCall(r, f);
         }
 
         public static string GetResource(string item)
         {
             var assembly = Assembly.GetExecutingAssembly();
-            var resourceName = "JackettTest." + item.Replace('/','.');
+            var resourceName = "Jackett.Test." + item.Replace('/','.');
 
             using (Stream stream = assembly.GetManifestResourceStream(resourceName))
             {

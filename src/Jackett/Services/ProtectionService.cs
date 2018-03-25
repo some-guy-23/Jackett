@@ -1,38 +1,32 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
-using Jackett.Utils;
+using Jackett.Common;
+using Jackett.Common.Models.Config;
+using Jackett.Common.Services.Interfaces;
+using Jackett.Common.Utils;
 
 namespace Jackett.Services
 {
-    public interface IProtectionService
-    {
-        string Protect(string plainText);
-        string UnProtect(string plainText);
-    }
 
     public class ProtectionService : IProtectionService
     {
         DataProtectionScope PROTECTION_SCOPE = DataProtectionScope.LocalMachine;
         private const string JACKETT_KEY = "JACKETT_KEY";
         const string APPLICATION_KEY = "Dvz66r3n8vhTGip2/quiw5ISyM37f7L2iOdupzdKmzkvXGhAgQiWK+6F+4qpxjPVNks1qO7LdWuVqRlzgLzeW8mChC6JnBMUS1Fin4N2nS9lh4XPuCZ1che75xO92Nk2vyXUo9KSFG1hvEszAuLfG2Mcg1r0sVyVXd2gQDU/TbY=";
+        private byte[] _instanceKey;
 
-        IServerService serverService;
-
-        public ProtectionService(IServerService s)
+        public ProtectionService(ServerConfig config)
         {
-            serverService = s;
-
             if (System.Environment.OSVersion.Platform == PlatformID.Unix)
             {
                 // We should not be running as root and will only have access to the local store.
                 PROTECTION_SCOPE = DataProtectionScope.CurrentUser;
             }
+            _instanceKey = Encoding.UTF8.GetBytes(config.InstanceId);
         }
 
         public string Protect(string plainText)
@@ -70,7 +64,7 @@ namespace Jackett.Services
 
             var plainBytes = Encoding.UTF8.GetBytes(plainText);
             var appKey = Convert.FromBase64String(APPLICATION_KEY);
-            var instanceKey = Encoding.UTF8.GetBytes(serverService.Config.InstanceId);
+            var instanceKey = _instanceKey;
             var entropy = new byte[appKey.Length + instanceKey.Length];
             Buffer.BlockCopy(instanceKey, 0, entropy, 0, instanceKey.Length);
             Buffer.BlockCopy(appKey, 0, entropy, instanceKey.Length, appKey.Length);
@@ -108,7 +102,7 @@ namespace Jackett.Services
                 return string.Empty;
 
             var protectedBytes = Convert.FromBase64String(plainText);
-            var instanceKey = Encoding.UTF8.GetBytes(serverService.Config.InstanceId);
+            var instanceKey = _instanceKey;
 
             using (MemoryStream ms = new MemoryStream())
             {
@@ -155,12 +149,12 @@ namespace Jackett.Services
         {
             var type = obj.GetType();
 
-            foreach(var property in type.GetProperties(BindingFlags.SetProperty |BindingFlags.GetProperty | BindingFlags.Public))
+            foreach (var property in type.GetProperties(BindingFlags.SetProperty | BindingFlags.GetProperty | BindingFlags.Public))
             {
-                if(property.GetCustomAttributes(typeof(JackettProtectedAttribute), false).Count() > 0)
+                if (property.GetCustomAttributes(typeof(JackettProtectedAttribute), false).Count() > 0)
                 {
                     var value = property.GetValue(obj);
-                    if(value is string)
+                    if (value is string)
                     {
                         var protectedString = Protect(value as string);
                         property.SetValue(obj, protectedString);

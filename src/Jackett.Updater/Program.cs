@@ -1,21 +1,14 @@
 ﻿using CommandLine;
+using CommandLine.Text;
+using Jackett.Common.Models.Config;
 using Jackett.Services;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Web;
-/*
-// no supported by appveyor, disabeling for now
-#if __MonoCS__
-using Mono.Unix.Native;
-#endif
-*/
+using Jackett.Common;
 
 namespace Jackett.Updater
 {
@@ -28,20 +21,25 @@ namespace Jackett.Updater
 
         private void Run(string[] args)
         {
-            Engine.SetupLogging(null, "updater.txt");
+            Engine.BuildContainer(new RuntimeSettings()
+            {
+                CustomLogFileName = "updater.txt"
+            });
             Engine.Logger.Info("Jackett Updater v" + GetCurrentVersion());
             Engine.Logger.Info("Options \"" + string.Join("\" \"", args) + "\"");
             try {
-                var options = new UpdaterConsoleOptions();
-                if (Parser.Default.ParseArguments(args, options))
+                var optionsResult = Parser.Default.ParseArguments<UpdaterConsoleOptions>(args);
+                optionsResult.WithParsed(options =>
                 {
                     ProcessUpdate(options);
                 }
-                else
+                );
+                optionsResult.WithNotParsed(errors =>
                 {
+                    Engine.Logger.Error(HelpText.AutoBuild(optionsResult));
                     Engine.Logger.Error("Failed to process update arguments!");
                     Console.ReadKey();
-                }
+                });
             }
             catch (Exception e)
             {
@@ -51,7 +49,7 @@ namespace Jackett.Updater
 
         private string GetCurrentVersion()
         {
-            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+            var assembly = Assembly.GetExecutingAssembly();
             var fvi = FileVersionInfo.GetVersionInfo(assembly.Location);
             return fvi.FileVersion;
         }
@@ -68,15 +66,9 @@ namespace Jackett.Updater
                     var exited = proc.WaitForExit(5000);
                     if (!exited)
                         Engine.Logger.Info("Process " + pid.ToString() + " didn't exit within 5 seconds");
-/*
-// no supported by appveyor, disabeling for now
-#if __MonoCS__
-                    Engine.Logger.Info("Sending SIGKILL to process " + pid.ToString());
-                    Syscall.kill(proc.Id, Signum.SIGKILL);
-#endif
-*/
+
                 }
-                catch (ArgumentException e)
+                catch (ArgumentException)
                 {
                     Engine.Logger.Info("Process " + pid.ToString() + " is already dead");
                 }
@@ -183,6 +175,35 @@ namespace Jackett.Updater
                 "Definitions/tspate.yml",
                 "Definitions/freakstrackingsystem.yml",
                 "Definitions/rarbg.yml",
+                "Definitions/t411.yml",
+                "Definitions/hdbc.yml", // renamed to hdbitscom
+                "Definitions/maniatorrent.yml",
+                "Definitions/nyaa.yml",
+                "Definitions/nachtwerk.yml",
+                "Definitions/leparadisdunet.yml",
+                "Definitions/qctorrent.yml",
+                "Definitions/dragonworld.yml",
+                "Definitions/hdclub.yml",
+                "Definitions/polishtracker.yml",
+                "Definitions/zetorrents.yml",
+                "Definitions/rapidetracker.yml",
+                "Definitions/isohunt.yml",
+                "Definitions/t411v2.yml",
+                "Definitions/bithq.yml",
+                "Definitions/blubits.yml",
+                "Definitions/torrentproject.yml",
+                "Definitions/torrentvault.yml",
+                "Definitions/apollo.yml", // migrated to C# gazelle base tracker
+                "Definitions/secretcinema.yml", // migrated to C# gazelle base tracker
+                "Definitions/utorrents.yml", // same as SzeneFZ now
+                "Definitions/ultrahdclub.yml",
+                "Definitions/infinityt.yml",
+                "Definitions/hachede-c.yml",
+                "Definitions/hd4Free.yml",
+                "Definitions/skytorrents.yml",
+                "Definitions/gormogon.yml",
+                "Definitions/czteam.yml",
+                "Definitions/rockhardlossless.yml",
             };
 
             foreach (var oldFIle in oldFiles)

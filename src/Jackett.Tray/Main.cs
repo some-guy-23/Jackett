@@ -1,20 +1,24 @@
-﻿using Jackett;
-using Jackett.Utils;
-using Microsoft.Win32;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.ComponentModel;
-using System.Data;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Jackett.Common;
+using Jackett.Common.Models.Config;
+using Jackett.Common.Utils;
+using Microsoft.Win32;
+using Jackett;
+using Jackett.Utils;
+using System.Collections.Generic;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
 
-namespace JackettTray
+
+namespace Jackett.Tray
 {
     public partial class Main : Form
     {
@@ -28,12 +32,13 @@ namespace JackettTray
 
             toolStripMenuItemWebUI.Click += toolStripMenuItemWebUI_Click;
             toolStripMenuItemShutdown.Click += toolStripMenuItemShutdown_Click;
-#if __MonoCS__
-            // No shortcuts on linux
-#else
-            toolStripMenuItemAutoStart.Visible = true;
-#endif
 
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            { 
+                toolStripMenuItemAutoStart.Visible = true;
+            }
+
+            Engine.BuildContainer(new RuntimeSettings(),new WebApi2Module());
             Engine.Server.Initalize();
 
             if (!Engine.ServiceConfig.ServiceExists())
@@ -54,7 +59,7 @@ namespace JackettTray
 
         void toolStripMenuItemWebUI_Click(object sender, EventArgs e)
         {
-            Process.Start("http://127.0.0.1:" + Engine.Server.Config.Port);
+            Process.Start("http://127.0.0.1:" + Engine.ServerConfig.Port);
         }
 
         void toolStripMenuItemShutdown_Click(object sender, EventArgs e)
@@ -104,16 +109,15 @@ namespace JackettTray
 
         private void CreateShortcut()
         {
-#if __MonoCS__
-            // No shortcuts on linux
-#else
-            var appPath = Assembly.GetExecutingAssembly().Location;
-            var shell = new IWshRuntimeLibrary.WshShell();
-            var shortcut = (IWshRuntimeLibrary.IWshShortcut)shell.CreateShortcut(ShortcutPath);
-            shortcut.Description = Assembly.GetExecutingAssembly().GetName().Name;
-            shortcut.TargetPath = appPath;
-            shortcut.Save();
-#endif
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            {
+                var appPath = Assembly.GetExecutingAssembly().Location;
+                var shell = new IWshRuntimeLibrary.WshShell();
+                var shortcut = (IWshRuntimeLibrary.IWshShortcut)shell.CreateShortcut(ShortcutPath);
+                shortcut.Description = Assembly.GetExecutingAssembly().GetName().Name;
+                shortcut.TargetPath = appPath;
+                shortcut.Save();
+            }
         }
 
         private void contextMenuStrip1_Opening(object sender, CancelEventArgs e)

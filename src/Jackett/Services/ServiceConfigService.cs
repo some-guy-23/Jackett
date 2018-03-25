@@ -1,26 +1,15 @@
 ﻿using NLog;
 using System;
-using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Configuration.Install;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.ServiceProcess;
-using System.Text;
-using System.Threading.Tasks;
+using Jackett.Common.Services.Interfaces;
 
 namespace Jackett.Services
 {
-    public interface IServiceConfigService
-    {
-        void Install();
-        void Uninstall();
-        bool ServiceExists();
-        bool ServiceRunning();
-        void Start();
-        void Stop();
-    }
 
     public class ServiceConfigService : IServiceConfigService
     {
@@ -91,7 +80,7 @@ namespace Jackett.Services
 
                 string[] cmdline = { @"/assemblypath=" + exePath};
 
-                var context = new InstallContext("jackettservice_install.log", cmdline);
+                var context = new InstallContext("jackettservice_install.log", cmdline);                
                 serviceInstaller.Context = context;
                 serviceInstaller.DisplayName = NAME;
                 serviceInstaller.ServiceName = NAME;

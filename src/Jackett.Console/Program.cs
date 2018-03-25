@@ -1,10 +1,10 @@
-﻿using CommandLine;
+﻿using System;
+using CommandLine;
 using CommandLine.Text;
-using Jackett;
-using Jackett.Console;
-using Jackett.Indexers;
+using Jackett.Common;
+using Jackett.Common.Models.Config;
+using Jackett.Common.Utils;
 using Jackett.Utils;
-using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -16,95 +16,60 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace JackettConsole
+namespace Jackett.Console
 {
     public class Program
     {
+
         static void Main(string[] args)
         {
-            try
+
+            var optionsResult = Parser.Default.ParseArguments<ConsoleOptions>(args);
+            optionsResult.WithNotParsed(errors =>
             {
-                var options = new ConsoleOptions();
-                if (!Parser.Default.ParseArguments(args, options) || options.ShowHelp == true)
+                var text = HelpText.AutoBuild(optionsResult);
+                text.Copyright = " ";
+                text.Heading = "Jackett v" + EnvironmentUtil.JackettVersion + " options:";
+                System.Console.WriteLine(text);
+                Environment.ExitCode = 1;
+                return;
+            });
+
+            optionsResult.WithParsed(options =>
+            {
+                try
                 {
-                    if (options.LastParserState != null && options.LastParserState.Errors.Count > 0)
-                    {
-                        var help = new HelpText();
-                        var errors = help.RenderParsingErrorsText(options, 2); // indent with two spaces
-                        Console.WriteLine("Jackett v" + Engine.ConfigService.GetVersion());
-                        Console.WriteLine("Switch error: " + errors);
-                        Console.WriteLine("See --help for further details on switches.");
-                        Environment.ExitCode = 1;
-                        return;
-                    }
-                    else
-                    {
+                    var runtimeSettings = options.ToRunTimeSettings();
 
-                        var text = HelpText.AutoBuild(options, (HelpText current) => HelpText.DefaultParsingErrorsHandler(options, current));
-                        text.Copyright = " ";
-                        text.Heading = "Jackett v" + Engine.ConfigService.GetVersion() + " options:";
-                        Console.WriteLine(text);
-                        Environment.ExitCode = 1;
-                        return;
-                    }
-                }
-                else
-                {
+                    // Initialize autofac, logger, etc. We cannot use any calls to Engine before the container is set up.
+                    Engine.BuildContainer(runtimeSettings, new WebApi2Module());
 
-                    if (options.ListenPublic && options.ListenPrivate)
-                    {
-                        Console.WriteLine("You can only use listen private OR listen publicly.");
-                        Environment.ExitCode = 1;
-                        return;
-                    }
-                    /*  ======     Options    =====  */
-
-                    // SSL Fix
-                    Startup.DoSSLFix = options.SSLFix;
-
-                    // Use curl
-                    if (options.Client != null)
-                        Startup.ClientOverride = options.Client.ToLowerInvariant();
-
-                    // Use Proxy
-                    if (options.ProxyConnection != null)
-                    {
-                        Startup.ProxyConnection = options.ProxyConnection.ToLowerInvariant();
-                        Engine.Logger.Info("Proxy enabled. " + Startup.ProxyConnection);
-                    }
-                    // Logging
-                    if (options.Logging)
-                        Startup.LogRequests = true;
-
-                    // Tracing
-                    if (options.Tracing)
-                        Startup.TracingEnabled = true;
-
-                    // Log after the fact as using the logger will cause the options above to be used
-
-                    if (options.Logging)
+                    if (runtimeSettings.LogRequests)
                         Engine.Logger.Info("Logging enabled.");
 
-                    if (options.Tracing)
+                    if (runtimeSettings.TracingEnabled)
                         Engine.Logger.Info("Tracing enabled.");
 
-                    if (options.SSLFix == true)
-                        Engine.Logger.Info("SSL ECC workaround enabled.");
-                    else if (options.SSLFix == false)
-                        Engine.Logger.Info("SSL ECC workaround has been disabled.");
-
-                    // Ignore SSL errors on Curl
-                    Startup.IgnoreSslErrors = options.IgnoreSslErrors;
-                    if (options.IgnoreSslErrors == true)
+                    if (runtimeSettings.IgnoreSslErrors == true)
                     {
                         Engine.Logger.Info("Jackett will ignore SSL certificate errors.");
                     }
 
+                    if (runtimeSettings.DoSSLFix == true)
+                        Engine.Logger.Info("SSL ECC workaround enabled.");
+                    else if (runtimeSettings.DoSSLFix == false)
+                        Engine.Logger.Info("SSL ECC workaround has been disabled.");
                     // Choose Data Folder
-                    if (!string.IsNullOrWhiteSpace(options.DataFolder))
+                    if (!string.IsNullOrWhiteSpace(runtimeSettings.CustomDataFolder))
                     {
-                        Startup.CustomDataFolder = options.DataFolder.Replace("\"", string.Empty).Replace("'", string.Empty).Replace(@"\\", @"\");
-                        Engine.Logger.Info("Jackett Data will be stored in: " + Startup.CustomDataFolder);
+                        Engine.Logger.Info("Jackett Data will be stored in: " + runtimeSettings.CustomDataFolder);
+                    }
+
+
+                    // Use Proxy
+                    if (options.ProxyConnection != null)
+                    {
+                        Engine.Logger.Info("Proxy enabled. " + runtimeSettings.ProxyConnection);
                     }
 
                     /*  ======     Actions    =====  */
@@ -162,7 +127,7 @@ namespace JackettConsole
                     // Show Version
                     if (options.ShowVersion)
                     {
-                        Console.WriteLine("Jackett v" + Engine.ConfigService.GetVersion());
+                        System.Console.WriteLine("Jackett v" + EnvironmentUtil.JackettVersion);
                         return;
                     }
 
@@ -171,10 +136,10 @@ namespace JackettConsole
                     // Override listen public
                     if (options.ListenPublic || options.ListenPrivate)
                     {
-                        if (Engine.Server.Config.AllowExternal != options.ListenPublic)
+                        if (Engine.ServerConfig.AllowExternal != options.ListenPublic)
                         {
                             Engine.Logger.Info("Overriding external access to " + options.ListenPublic);
-                            Engine.Server.Config.AllowExternal = options.ListenPublic;
+                            Engine.ServerConfig.AllowExternal = options.ListenPublic;
                             if (System.Environment.OSVersion.Platform != PlatformID.Unix)
                             {
                                 if (ServerUtil.IsUserAdministrator())
@@ -184,22 +149,21 @@ namespace JackettConsole
                                 else
                                 {
                                     Engine.Logger.Error("Unable to switch to public listening without admin rights.");
-                                    Environment.ExitCode = 1;
-                                    return;
+                                    Engine.Exit(1);
                                 }
                             }
 
-                            Engine.Server.SaveConfig();
+                            Engine.SaveServerConfig();
                         }
                     }
 
                     // Override port
                     if (options.Port != 0)
                     {
-                        if (Engine.Server.Config.Port != options.Port)
+                        if (Engine.ServerConfig.Port != options.Port)
                         {
                             Engine.Logger.Info("Overriding port to " + options.Port);
-                            Engine.Server.Config.Port = options.Port;
+                            Engine.ServerConfig.Port = options.Port;
                             if (System.Environment.OSVersion.Platform != PlatformID.Unix)
                             {
                                 if (ServerUtil.IsUserAdministrator())
@@ -209,28 +173,29 @@ namespace JackettConsole
                                 else
                                 {
                                     Engine.Logger.Error("Unable to switch ports when not running as administrator");
-                                    Environment.ExitCode = 1;
-                                    return;
+                                    Engine.Exit(1);
                                 }
                             }
 
-                            Engine.Server.SaveConfig();
+                            Engine.SaveServerConfig();
                         }
                     }
 
-                    Startup.NoRestart = options.NoRestart;
+                    Engine.Server.Initalize();
+                    Engine.Server.Start();
+                    Engine.RunTime.Spin();
+                    Engine.Logger.Info("Server thread exit");
                 }
+                catch (Exception e)
+                {
+                    Engine.Logger.Error(e, "Top level exception");
+                }
+            });
+    }
+        
 
-                Engine.Server.Initalize();
-                Engine.Server.Start();
-                Engine.RunTime.Spin();
-                Engine.Logger.Info("Server thread exit");
-            }
-            catch (Exception e)
-            {
-                Engine.Logger.Error(e, "Top level exception");
-            }
-        }
+       
+
     }
 }
 
